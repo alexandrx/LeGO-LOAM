@@ -1876,7 +1876,9 @@ public:
         }else{
             return;
         }
-
+	/**
+        	1. Feature Extraction
+        */
         adjustDistortion();
 
         calculateSmoothness();
@@ -1885,8 +1887,11 @@ public:
 
         extractFeatures();
 
-        publishCloud();
-
+        publishCloud(); // cloud for visualization
+	
+	/**
+		2. Feature Association
+        */
         if (!systemInitedLM) {
             checkSystemInitialization();
             return;
@@ -1900,7 +1905,7 @@ public:
 
         publishOdometry();
 
-        publishCloudsLast();   
+        publishCloudsLast(); // cloud to mapOptimization
     }
 };
 

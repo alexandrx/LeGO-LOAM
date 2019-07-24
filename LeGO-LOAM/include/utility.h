@@ -25,7 +25,10 @@
 
 #include <tf/transform_broadcaster.h>
 #include <tf/transform_datatypes.h>
- 
+
+#include <velodyne_pointcloud/point_types.h>
+#include <velodyne_pointcloud/rawdata.h>
+
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -47,6 +50,10 @@
 using namespace std;
 
 typedef pcl::PointXYZI  PointType;
+typedef velodyne_pointcloud::PointXYZIR  VelodynePointType;
+
+extern const string pointCloudTopic = "/velodyne_points";
+extern const string imuTopic = "/imu/data";
 
 struct smoothness_t{ 
     float value;
@@ -59,6 +66,9 @@ struct by_value{
     }
 };
 
+/*
+    * A point cloud type that has 6D pose info ([x,y,z,roll,pitch,yaw] intensity is time stamp)
+    */
 struct PointXYZIRPYT
 {
     PCL_ADD_POINT4D
