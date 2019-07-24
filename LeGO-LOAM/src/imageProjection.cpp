@@ -45,7 +45,7 @@ private:
     ros::Publisher pubSegmentedCloudInfo;
     ros::Publisher pubOutlierCloud;
 
-    pcl::PointCloud<PointType>::Ptr laserCloudIn;
+    pcl::PointCloud<VelodynePointType>::Ptr laserCloudIn;
 
     pcl::PointCloud<PointType>::Ptr fullCloud; // projected velodyne raw cloud, but saved in the form of 1-D matrix
     pcl::PointCloud<PointType>::Ptr fullInfoCloud; // same as fullCloud, but with intensity - range
@@ -102,7 +102,7 @@ public:
 
     void allocateMemory(){
 
-        laserCloudIn.reset(new pcl::PointCloud<PointType>());
+        laserCloudIn.reset(new pcl::PointCloud<VelodynePointType>());
 
         fullCloud.reset(new pcl::PointCloud<PointType>());
         fullInfoCloud.reset(new pcl::PointCloud<PointType>());
@@ -208,7 +208,8 @@ public:
             thisPoint.z = laserCloudIn->points[i].z;
             // find the row and column index in the iamge for this point
             verticalAngle = atan2(thisPoint.z, sqrt(thisPoint.x * thisPoint.x + thisPoint.y * thisPoint.y)) * 180 / M_PI;
-            rowIdn = (verticalAngle + ang_bottom) / ang_res_y;
+            //rowIdn = (verticalAngle + ang_bottom) / ang_res_y;
+            rowIdn = laserCloudIn->points[i].ring;
             if (rowIdn < 0 || rowIdn >= N_SCAN)
                 continue;
 
