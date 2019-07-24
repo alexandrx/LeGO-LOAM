@@ -69,6 +69,7 @@ private:
     double timeNewOutlierCloud;
     double scanPeriod ;
     
+    std::string imuTopic;
     
     bool newSegmentedCloud;
     bool newSegmentedCloudInfo;
@@ -195,11 +196,12 @@ public:
 
     FeatureAssociation():
         nh("~")
-        {
+    {
+        getParametersFromRos();
         subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/segmented_cloud", 1, &FeatureAssociation::laserCloudHandler, this);
         subLaserCloudInfo = nh.subscribe<cloud_msgs::cloud_info>("/segmented_cloud_info", 1, &FeatureAssociation::laserCloudInfoHandler, this);
         subOutlierCloud = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud", 1, &FeatureAssociation::outlierCloudHandler, this);
-        subImu = nh.subscribe<sensor_msgs::Imu>("/imu", 50, &FeatureAssociation::imuHandler, this);
+        subImu = nh.subscribe<sensor_msgs::Imu>(imuTopic, 50, &FeatureAssociation::imuHandler, this);
 
         pubCornerPointsSharp = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_sharp", 1);
         pubCornerPointsLessSharp = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_less_sharp", 1);
@@ -210,23 +212,24 @@ public:
         pubLaserCloudSurfLast = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surf_last", 2);
         pubOutlierCloudLast = nh.advertise<sensor_msgs::PointCloud2>("/outlier_cloud_last", 2);
         pubLaserOdometry = nh.advertise<nav_msgs::Odometry> ("/laser_odom_to_init", 5);
-        getParametersFromRos();
+        
         initializationValue();
         
     }
 
     void getParametersFromRos(){
-        nh.getParam("imuQueLength",imuQueLength);
-        nh.getParam("surfThreshold",surfThreshold);
-        nh.getParam("nearestFeatureSearchSqDist",nearestFeatureSearchSqDist);
-        nh.getParam("edgeThreshold",edgeThreshold);
-        nh.getParam("N_SCAN",N_SCAN);
-        nh.getParam("Horizon_SCAN",Horizon_SCAN);
-        nh.getParam("ang_res_x",ang_res_x);
-        nh.getParam("ang_res_y",ang_res_y);
-        nh.getParam("ang_bottom",ang_bottom);
-        nh.getParam("groundScanInd",groundScanInd);
+        nh.getParam("imuQueLength", imuQueLength);
+        nh.getParam("surfThreshold", surfThreshold);
+        nh.getParam("nearestFeatureSearchSqDist", nearestFeatureSearchSqDist);
+        nh.getParam("edgeThreshold", edgeThreshold);
+        nh.getParam("N_SCAN", N_SCAN);
+        nh.getParam("Horizon_SCAN", Horizon_SCAN);
+        nh.getParam("ang_res_x", ang_res_x);
+        nh.getParam("ang_res_y", ang_res_y);
+        nh.getParam("ang_bottom", ang_bottom);
+        nh.getParam("groundScanInd", groundScanInd);
         nh.getParam("scanPeriod", scanPeriod);
+        nh.getParam("imuTopic", imuTopic);
     }
 
     void initializationValue()

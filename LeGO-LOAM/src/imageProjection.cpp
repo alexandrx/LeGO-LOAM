@@ -80,6 +80,8 @@ private:
     float  ang_bottom ;
     int  groundScanInd ;
     std::vector<std::pair<uint8_t, uint8_t> > neighborIterator;
+    
+    std::string pointCloudTopic;
 
     uint16_t *allPushedIndX;
     uint16_t *allPushedIndY;
@@ -90,8 +92,9 @@ private:
 public:
     ImageProjection():
         nh("~"){
-
-        subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/velodyne_points", 1, &ImageProjection::cloudHandler, this);
+		getParametersFromRos();
+		
+        subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>(pointCloudTopic, 1, &ImageProjection::cloudHandler, this);
 
         pubFullCloud = nh.advertise<sensor_msgs::PointCloud2> ("/full_cloud_projected", 1);
         pubFullInfoCloud = nh.advertise<sensor_msgs::PointCloud2> ("/full_cloud_info", 1);
@@ -107,7 +110,7 @@ public:
         nanPoint.y = std::numeric_limits<float>::quiet_NaN();
         nanPoint.z = std::numeric_limits<float>::quiet_NaN();
         nanPoint.intensity = -1;
-        getParametersFromRos();
+        
         allocateMemory();
         resetParameters();
         
@@ -115,18 +118,19 @@ public:
 
 
     void getParametersFromRos(){
-        nh.getParam("sensorMountAngle",sensorMountAngle);
-        nh.getParam("segmentTheta",segmentTheta);
-        nh.getParam("segmentValidPointNum",segmentValidPointNum);
-        nh.getParam("segmentValidLineNum",segmentValidLineNum);
-        nh.getParam("segmentAlphaX",segmentAlphaX);
-        nh.getParam("segmentAlphaY",segmentAlphaY);
-        nh.getParam("N_SCAN",N_SCAN);
-        nh.getParam("Horizon_SCAN",Horizon_SCAN);
-        nh.getParam("ang_res_x",ang_res_x);
-        nh.getParam("ang_res_y",ang_res_y);
-        nh.getParam("ang_bottom",ang_bottom);
-        nh.getParam("groundScanInd",groundScanInd);
+        nh.getParam("sensorMountAngle", sensorMountAngle);
+        nh.getParam("segmentTheta", segmentTheta);
+        nh.getParam("segmentValidPointNum", segmentValidPointNum);
+        nh.getParam("segmentValidLineNum", segmentValidLineNum);
+        nh.getParam("segmentAlphaX", segmentAlphaX);
+        nh.getParam("segmentAlphaY", segmentAlphaY);
+        nh.getParam("N_SCAN", N_SCAN);
+        nh.getParam("Horizon_SCAN", Horizon_SCAN);
+        nh.getParam("ang_res_x", ang_res_x);
+        nh.getParam("ang_res_y", ang_res_y);
+        nh.getParam("ang_bottom", ang_bottom);
+        nh.getParam("groundScanInd", groundScanInd);
+        nh.getParam("pointCloudTopic", pointCloudTopic);
     }
     
     void allocateMemory(){
