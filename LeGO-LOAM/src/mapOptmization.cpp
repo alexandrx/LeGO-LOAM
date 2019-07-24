@@ -175,14 +175,15 @@ private:
     float transformTobeMapped[6];
     float transformBefMapped[6];
     float transformAftMapped[6];
-
-
+    
+    double scanPeriod ;
+    
+    std::vector<double> imuTime;
+    std::vector<float> imuRoll;
+    std::vector<float> imuPitch;
     int imuPointerFront;
     int imuPointerLast;
-
-    double imuTime[imuQueLength];
-    float imuRoll[imuQueLength];
-    float imuPitch[imuQueLength];
+ 
 
     std::mutex mtx;
 
@@ -217,18 +218,36 @@ private:
 
     float cRoll, sRoll, cPitch, sPitch, cYaw, sYaw, tX, tY, tZ;
     float ctRoll, stRoll, ctPitch, stPitch, ctYaw, stYaw, tInX, tInY, tInZ;
+    bool loopClosureEnableFlag;
+    double mappingProcessInterval;
+    int imuQueLength;
+    double surroundingKeyframeSearchRadius;
+    double surroundingKeyframeSearchNum;
+    double historyKeyframeSearchRadius;
+    double historyKeyframeSearchNum;
+    double historyKeyframeFitnessScore;
+    float globalMapVisualizationSearchRadius;
+    int N_SCAN ;
+    int Horizon_SCAN ;
+    float ang_res_x ;
+    float ang_res_y ;
+    float ang_bottom ;
+    int groundScanInd ;
+    
+    std::string imuTopic;
 
 public:
-
-    
 
     mapOptimization():
         nh("~")
     {
+        
     	ISAM2Params parameters;
 		parameters.relinearizeThreshold = 0.01;
 		parameters.relinearizeSkip = 1;
     	isam = new ISAM2(parameters);
+    	
+    	getParametersFromRos();
 
         pubKeyPoses = nh.advertise<sensor_msgs::PointCloud2>("/key_pose_origin", 2);
         pubLaserCloudSurround = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 2);
@@ -259,8 +278,29 @@ public:
 
         aftMappedTrans.frame_id_ = "/camera_init";
         aftMappedTrans.child_frame_id_ = "/aft_mapped";
-
+        
         allocateMemory();
+       
+    }
+
+    void getParametersFromRos(){
+        nh.getParam("loopClosureEnableFlag", loopClosureEnableFlag);   
+        nh.getParam("scanPeriod", scanPeriod);
+        nh.getParam("mappingProcessInterval", mappingProcessInterval);
+        nh.getParam("imuQueLength", imuQueLength);
+        nh.getParam("surroundingKeyframeSearchRadius", surroundingKeyframeSearchRadius);
+        nh.getParam("surroundingKeyframeSearchNum", surroundingKeyframeSearchNum);
+        nh.getParam("historyKeyframeSearchRadius", historyKeyframeSearchRadius);
+        nh.getParam("historyKeyframeSearchNum", historyKeyframeSearchNum);
+        nh.getParam("historyKeyframeFitnessScore", historyKeyframeFitnessScore);
+        nh.getParam("globalMapVisualizationSearchRadius", globalMapVisualizationSearchRadius);
+        nh.getParam("N_SCAN", N_SCAN);
+        nh.getParam("Horizon_SCAN", Horizon_SCAN);
+        nh.getParam("ang_res_x", ang_res_x);
+        nh.getParam("ang_res_y", ang_res_y);
+        nh.getParam("ang_bottom", ang_bottom);
+        nh.getParam("groundScanInd", groundScanInd);
+        nh.getParam("imuTopic", imuTopic);
     }
 
     void allocateMemory(){
@@ -294,6 +334,9 @@ public:
         kdtreeCornerFromMap.reset(new pcl::KdTreeFLANN<PointType>());
         kdtreeSurfFromMap.reset(new pcl::KdTreeFLANN<PointType>());
 
+        imuTime.resize(imuQueLength);
+        imuRoll.resize(imuQueLength);
+        imuPitch.resize(imuQueLength);
         
         nearHistoryCornerKeyFrameCloud.reset(new pcl::PointCloud<PointType>());
         nearHistoryCornerKeyFrameCloudDS.reset(new pcl::PointCloud<PointType>());
@@ -491,6 +534,7 @@ public:
 		    transformBefMapped[i] = transformSum[i];
 		    transformAftMapped[i] = transformTobeMapped[i];
 		}
+
     }
 
     void updatePointAssociateToMapSinCos(){
