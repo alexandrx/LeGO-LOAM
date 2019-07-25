@@ -174,14 +174,15 @@ private:
     float transformTobeMapped[6];
     float transformBefMapped[6];
     float transformAftMapped[6];
-
-
+    
+    double scanPeriod ;
+    
+    std::vector<double> imuTime;
+    std::vector<float> imuRoll;
+    std::vector<float> imuPitch;
     int imuPointerFront;
     int imuPointerLast;
-
-    double imuTime[imuQueLength];
-    float imuRoll[imuQueLength];
-    float imuPitch[imuQueLength];
+ 
 
     std::mutex mtx;
 
@@ -216,18 +217,36 @@ private:
 
     float cRoll, sRoll, cPitch, sPitch, cYaw, sYaw, tX, tY, tZ;
     float ctRoll, stRoll, ctPitch, stPitch, ctYaw, stYaw, tInX, tInY, tInZ;
+    bool loopClosureEnableFlag;
+    double mappingProcessInterval;
+    int imuQueLength;
+    double surroundingKeyframeSearchRadius;
+    double surroundingKeyframeSearchNum;
+    double historyKeyframeSearchRadius;
+    double historyKeyframeSearchNum;
+    double historyKeyframeFitnessScore;
+    float globalMapVisualizationSearchRadius;
+    int N_SCAN ;
+    int Horizon_SCAN ;
+    float ang_res_x ;
+    float ang_res_y ;
+    float ang_bottom ;
+    int groundScanInd ;
+    
+    std::string imuTopic;
 
 public:
-
-    
 
     mapOptimization():
         nh("~")
     {
+        
     	ISAM2Params parameters;
 		parameters.relinearizeThreshold = 0.01;
 		parameters.relinearizeSkip = 1;
     	isam = new ISAM2(parameters);
+    	
+    	getParametersFromRos();
 
         pubKeyPoses = nh.advertise<sensor_msgs::PointCloud2>("/key_pose_origin", 2);
         pubLaserCloudSurround = nh.advertise<sensor_msgs::PointCloud2>("/laser_cloud_surround", 2);
@@ -258,8 +277,29 @@ public:
 
         aftMappedTrans.frame_id_ = "/camera_init";
         aftMappedTrans.child_frame_id_ = "/aft_mapped";
-
+        
         allocateMemory();
+       
+    }
+
+    void getParametersFromRos(){
+        nh.getParam("loopClosureEnableFlag", loopClosureEnableFlag);   
+        nh.getParam("scanPeriod", scanPeriod);
+        nh.getParam("mappingProcessInterval", mappingProcessInterval);
+        nh.getParam("imuQueLength", imuQueLength);
+        nh.getParam("surroundingKeyframeSearchRadius", surroundingKeyframeSearchRadius);
+        nh.getParam("surroundingKeyframeSearchNum", surroundingKeyframeSearchNum);
+        nh.getParam("historyKeyframeSearchRadius", historyKeyframeSearchRadius);
+        nh.getParam("historyKeyframeSearchNum", historyKeyframeSearchNum);
+        nh.getParam("historyKeyframeFitnessScore", historyKeyframeFitnessScore);
+        nh.getParam("globalMapVisualizationSearchRadius", globalMapVisualizationSearchRadius);
+        nh.getParam("N_SCAN", N_SCAN);
+        nh.getParam("Horizon_SCAN", Horizon_SCAN);
+        nh.getParam("ang_res_x", ang_res_x);
+        nh.getParam("ang_res_y", ang_res_y);
+        nh.getParam("ang_bottom", ang_bottom);
+        nh.getParam("groundScanInd", groundScanInd);
+        nh.getParam("imuTopic", imuTopic);
     }
 
     void allocateMemory(){
@@ -293,6 +333,9 @@ public:
         kdtreeCornerFromMap.reset(new pcl::KdTreeFLANN<PointType>());
         kdtreeSurfFromMap.reset(new pcl::KdTreeFLANN<PointType>());
 
+        imuTime.resize(imuQueLength);
+        imuRoll.resize(imuQueLength);
+        imuPitch.resize(imuQueLength);
         
         nearHistoryCornerKeyFrameCloud.reset(new pcl::PointCloud<PointType>());
         nearHistoryCornerKeyFrameCloudDS.reset(new pcl::PointCloud<PointType>());
@@ -490,6 +533,7 @@ public:
 		    transformBefMapped[i] = transformSum[i];
 		    transformAftMapped[i] = transformTobeMapped[i];
 		}
+
     }
 
     void updatePointAssociateToMapSinCos(){
@@ -700,6 +744,32 @@ public:
             rate.sleep();
             publishGlobalMap();
         }
+        // save final point cloud
+        pcl::io::savePCDFileASCII(fileDirectory+"finalCloud.pcd", *globalMapKeyFramesDS);
+
+        string cornerMapString = "/tmp/cornerMap.pcd";
+        string surfaceMapString = "/tmp/surfaceMap.pcd";
+        string trajectoryString = "/tmp/trajectory.pcd";
+
+        pcl::PointCloud<PointType>::Ptr cornerMapCloud(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr cornerMapCloudDS(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr surfaceMapCloud(new pcl::PointCloud<PointType>());
+        pcl::PointCloud<PointType>::Ptr surfaceMapCloudDS(new pcl::PointCloud<PointType>());
+        
+        for(int i = 0; i < cornerCloudKeyFrames.size(); i++) {
+            *cornerMapCloud  += *transformPointCloud(cornerCloudKeyFrames[i],   &cloudKeyPoses6D->points[i]);
+	    *surfaceMapCloud += *transformPointCloud(surfCloudKeyFrames[i],     &cloudKeyPoses6D->points[i]);
+	    *surfaceMapCloud += *transformPointCloud(outlierCloudKeyFrames[i],  &cloudKeyPoses6D->points[i]);
+        }
+
+        downSizeFilterCorner.setInputCloud(cornerMapCloud);
+        downSizeFilterCorner.filter(*cornerMapCloudDS);
+        downSizeFilterSurf.setInputCloud(surfaceMapCloud);
+        downSizeFilterSurf.filter(*surfaceMapCloudDS);
+
+        pcl::io::savePCDFileASCII(fileDirectory+"cornerMap.pcd", *cornerMapCloudDS);
+        pcl::io::savePCDFileASCII(fileDirectory+"surfaceMap.pcd", *surfaceMapCloudDS);
+        pcl::io::savePCDFileASCII(fileDirectory+"trajectory.pcd", *cloudKeyPoses3D);
     }
 
     void publishGlobalMap(){
@@ -709,10 +779,10 @@ public:
 
         if (cloudKeyPoses3D->points.empty() == true)
             return;
-	// kd-tree to find near key frames to visualize
+	    // kd-tree to find near key frames to visualize
         std::vector<int> pointSearchIndGlobalMap;
         std::vector<float> pointSearchSqDisGlobalMap;
-	// search near key frames to visualize
+	    // search near key frames to visualize
         mtx.lock();
         kdtreeGlobalMap->setInputCloud(cloudKeyPoses3D);
         kdtreeGlobalMap->radiusSearch(currentRobotPosPoint, globalMapVisualizationSearchRadius, pointSearchIndGlobalMap, pointSearchSqDisGlobalMap, 0);
@@ -720,17 +790,17 @@ public:
 
         for (int i = 0; i < pointSearchIndGlobalMap.size(); ++i)
           globalMapKeyPoses->points.push_back(cloudKeyPoses3D->points[pointSearchIndGlobalMap[i]]);
-	// downsample near selected key frames
+	    // downsample near selected key frames
         downSizeFilterGlobalMapKeyPoses.setInputCloud(globalMapKeyPoses);
         downSizeFilterGlobalMapKeyPoses.filter(*globalMapKeyPosesDS);
-	// extract visualized and downsampled key frames
+	    // extract visualized and downsampled key frames
         for (int i = 0; i < globalMapKeyPosesDS->points.size(); ++i){
 			int thisKeyInd = (int)globalMapKeyPosesDS->points[i].intensity;
 			*globalMapKeyFrames += *transformPointCloud(cornerCloudKeyFrames[thisKeyInd],   &cloudKeyPoses6D->points[thisKeyInd]);
 			*globalMapKeyFrames += *transformPointCloud(surfCloudKeyFrames[thisKeyInd],    &cloudKeyPoses6D->points[thisKeyInd]);
 			*globalMapKeyFrames += *transformPointCloud(outlierCloudKeyFrames[thisKeyInd], &cloudKeyPoses6D->points[thisKeyInd]);
         }
-	// downsample visualized points
+	    // downsample visualized points
         downSizeFilterGlobalMapKeyFrames.setInputCloud(globalMapKeyFrames);
         downSizeFilterGlobalMapKeyFrames.filter(*globalMapKeyFramesDS);
  
@@ -743,7 +813,7 @@ public:
         globalMapKeyPoses->clear();
         globalMapKeyPosesDS->clear();
         globalMapKeyFrames->clear();
-        globalMapKeyFramesDS->clear();     
+        // globalMapKeyFramesDS->clear();     
     }
 
     void loopClosureThread(){

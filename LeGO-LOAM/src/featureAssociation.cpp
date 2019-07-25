@@ -37,7 +37,6 @@
 class FeatureAssociation{
 
 private:
-
     enum { SIZE_SCANS = N_SCAN * Horizon_SCAN };
 
     ros::NodeHandle nh;
@@ -69,7 +68,10 @@ private:
     double timeNewSegmentedCloud;
     double timeNewSegmentedCloudInfo;
     double timeNewOutlierCloud;
-
+    double scanPeriod ;
+    
+    std::string imuTopic;
+    
     bool newSegmentedCloud;
     bool newSegmentedCloudInfo;
     bool newOutlierCloud;
@@ -81,9 +83,10 @@ private:
     bool systemInited;
 
     std::vector<smoothness_t> cloudSmoothness;
-    float cloudCurvature[SIZE_SCANS];
-    int cloudNeighborPicked[SIZE_SCANS];
-    int cloudLabel[SIZE_SCANS];
+
+    std::vector<float>  cloudCurvature;
+    std::vector<int> cloudNeighborPicked;
+    std::vector<int>  cloudLabel;
 
     int imuPointerFront;
     int imuPointerLast;
@@ -106,16 +109,16 @@ private:
     Vector3D imuAngularRotationLast;
     Vector3D imuAngularFromStart;
 
-    double imuTime[imuQueLength];
-    float imuRoll[imuQueLength];
-    float imuPitch[imuQueLength];
-    float imuYaw[imuQueLength];
+    std::vector<double> imuTime;
+    std::vector<float> imuRoll;
+    std::vector<float> imuPitch;
+    std::vector<float> imuYaw;
 
-    Vector3D imuAcc[imuQueLength];
-    Vector3D imuVelo[imuQueLength];
-    Vector3D imuShift[imuQueLength];
-    Vector3D imuAngularVelo[imuQueLength];
-    Vector3D imuAngularRotation[imuQueLength];
+    std::vector<Vector3D> imuAcc;
+    std::vector<Vector3D> imuVelo;
+    std::vector<Vector3D> imuShift;
+    std::vector<Vector3D> imuAngularVelo;
+    std::vector<Vector3D> imuAngularRotation;
 
     ros::Publisher pubLaserCloudCornerLast;
     ros::Publisher pubLaserCloudSurfLast;
@@ -128,14 +131,14 @@ private:
     int laserCloudCornerLastNum;
     int laserCloudSurfLastNum;
 
-    int pointSelCornerInd[SIZE_SCANS];
-    float pointSearchCornerInd1[SIZE_SCANS];
-    float pointSearchCornerInd2[SIZE_SCANS];
+    std::vector<int> pointSelCornerInd;
+    std::vector<float> pointSearchCornerInd1;
+    std::vector<float> pointSearchCornerInd2;
 
-    int pointSelSurfInd[SIZE_SCANS];
-    float pointSearchSurfInd1[SIZE_SCANS];
-    float pointSearchSurfInd2[SIZE_SCANS];
-    float pointSearchSurfInd3[SIZE_SCANS];
+    std::vector<int> pointSelSurfInd;
+    std::vector<float> pointSearchSurfInd1;
+    std::vector<float> pointSearchSurfInd2;
+    std::vector<float> pointSearchSurfInd3;
 
     float transformCur[6];
     float transformSum[6];
@@ -165,14 +168,24 @@ private:
     bool isDegenerate;
     cv::Mat matP;
 
-    int frameCount;
+    int  frameCount;
+    int  imuQueLength;
+    float  surfThreshold;
+    int  nearestFeatureSearchSqDist;
+    float  edgeThreshold;
+    int  N_SCAN ;
+    int  Horizon_SCAN ;
+    float  ang_res_x ;
+    float  ang_res_y ;
+    float  ang_bottom ;
+    int  groundScanInd ;
 
 public:
 
     FeatureAssociation():
         nh("~")
-        {
-
+    {
+        getParametersFromRos();
         subLaserCloud = nh.subscribe<sensor_msgs::PointCloud2>("/segmented_cloud", 1, &FeatureAssociation::laserCloudHandler, this);
         subLaserCloudInfo = nh.subscribe<cloud_msgs::cloud_info>("/segmented_cloud_info", 1, &FeatureAssociation::laserCloudInfoHandler, this);
         subOutlierCloud = nh.subscribe<sensor_msgs::PointCloud2>("/outlier_cloud", 1, &FeatureAssociation::outlierCloudHandler, this);
@@ -189,11 +202,51 @@ public:
         pubLaserOdometry = nh.advertise<nav_msgs::Odometry> ("/laser_odom_to_init", 5);
         
         initializationValue();
+        
+    }
+
+    void getParametersFromRos(){
+        nh.getParam("imuQueLength", imuQueLength);
+        nh.getParam("surfThreshold", surfThreshold);
+        nh.getParam("nearestFeatureSearchSqDist", nearestFeatureSearchSqDist);
+        nh.getParam("edgeThreshold", edgeThreshold);
+        nh.getParam("N_SCAN", N_SCAN);
+        nh.getParam("Horizon_SCAN", Horizon_SCAN);
+        nh.getParam("ang_res_x", ang_res_x);
+        nh.getParam("ang_res_y", ang_res_y);
+        nh.getParam("ang_bottom", ang_bottom);
+        nh.getParam("groundScanInd", groundScanInd);
+        nh.getParam("scanPeriod", scanPeriod);
+        nh.getParam("imuTopic", imuTopic);
     }
 
     void initializationValue()
     {
+
         cloudSmoothness.resize(SIZE_SCANS);
+      
+        imuTime.resize(imuQueLength);
+        imuRoll.resize(imuQueLength);
+        imuPitch.resize(imuQueLength);
+        imuYaw.resize(imuQueLength);
+        imuAcc.resize(imuQueLength);
+        imuVelo.resize(imuQueLength);
+        imuShift.resize(imuQueLength);
+        imuAngularVelo.resize(imuQueLength);
+        imuAngularRotation.resize(imuQueLength);
+        
+        pointSelCornerInd.resize(SIZE_SCANS);
+        pointSearchCornerInd1.resize(SIZE_SCANS);
+        pointSearchCornerInd2.resize(SIZE_SCANS);
+
+        pointSelSurfInd.resize(SIZE_SCANS);
+        pointSearchSurfInd1.resize(SIZE_SCANS);
+        pointSearchSurfInd2.resize(SIZE_SCANS);
+        pointSearchSurfInd3.resize(SIZE_SCANS);
+
+        cloudCurvature.resize(SIZE_SCANS);
+        cloudNeighborPicked.resize(SIZE_SCANS);
+        cloudLabel.resize(SIZE_SCANS);
 
         downSizeFilter.setLeafSize(0.2, 0.2, 0.2);
 
@@ -244,7 +297,9 @@ public:
         for (int i = 0; i < imuQueLength; ++i)
         {
             imuTime[i] = 0;
-            imuRoll[i] = 0; imuPitch[i] = 0; imuYaw[i] = 0;
+            imuRoll[i] = 0; 
+            imuPitch[i] = 0; 
+            imuYaw[i] = 0;
             imuAcc[i].setZero();
             imuVelo[i].setZero();
             imuShift[i].setZero();
@@ -284,6 +339,7 @@ public:
         matP = cv::Mat(6, 6, CV_32F, cv::Scalar::all(0));
 
         frameCount = skipFrameNum;
+
     }
 
     void updateImuRollPitchYawStartSinCos(){
@@ -379,6 +435,7 @@ public:
 
         int imuPointerBack = (imuPointerLast + imuQueLength - 1) % imuQueLength;
         double timeDiff = imuTime[imuPointerLast] - imuTime[imuPointerBack];
+        
         if (timeDiff < scanPeriod) {
 
             imuShift[imuPointerLast] = imuShift[imuPointerBack] + imuVelo[imuPointerBack] * timeDiff + acc * timeDiff * timeDiff / 2;
@@ -576,6 +633,7 @@ public:
             cloudSmoothness[i].value = cloudCurvature[i];
             cloudSmoothness[i].ind = i;
         }
+
     }
 
     void markOccludedPoints()
